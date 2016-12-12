@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+from __future__ import unicode_literals
+
 from base64 import b32encode, b32decode, b64encode
 from queue import Queue, Empty
 from enum import Enum
@@ -56,16 +58,18 @@ class Captcha(object):
 
     def add_part(self, nr, data):
         assert 0 <= nr < self.parts_num
-        assert nr not in self.__parts
 
-        self.status = self.Status.UPLOADING
-        self.__parts[nr] = data
-        logger.info('Part {p} of captcha {c} uploaded'.format(p=nr, c=self.str_id))
+        if nr not in self.__parts:
+            self.status = self.Status.UPLOADING
+            self.__parts[nr] = data
+            logger.info('Part {p} of captcha {c} uploaded'.format(p=nr, c=self.str_id))
 
-        if self.parts_num == len(self.__parts):
-            logger.info("All parts of captcha {c} are here, adding resolving to queue!".format(c=self.str_id))
-            self.status = Captcha.Status.UPLOADED
-            self.queue.put(self.resolve)
+            if self.parts_num == len(self.__parts):
+                logger.info("All parts of captcha {c} are here, adding resolving to queue!".format(c=self.str_id))
+                self.status = Captcha.Status.UPLOADED
+                self.queue.put(self.resolve)
+        else:
+            assert self.__parts[nr] == data
 
     def resolve(self):
         _9kw = self.__py9kw

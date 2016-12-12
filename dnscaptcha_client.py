@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+from __future__ import unicode_literals
+
 from base64 import b32encode, b32decode
 from time import sleep
 from io import BytesIO
@@ -7,11 +9,11 @@ import logging
 
 from requests.exceptions import Timeout, ConnectionError
 from dnslib import DNSRecord, DNSQuestion, QTYPE, DNSLabel
-from PIL import Image
 import requests
 
 logger = logging.getLogger('DNSCaptcha.Client')
 MAX_DOMAIN_NAME_LEN = 253
+COMPRESS = True
 # NS = '212.2.96.51'  # aero2 ns1
 NS = '212.2.96.52'  # aero2 ns2
 
@@ -93,7 +95,7 @@ class CaptchaDNSSender(object):
 class Captcha(object):
     def __init__(self):
         self.phpsessid = None
-        self.img, self.comp_img = None, None
+        self.img = None
 
     def block_for_captcha(self):
         while True:
@@ -104,18 +106,25 @@ class Captcha(object):
             else:
                 self.phpsessid = data.text.split('name="PHPSESSID" value="')[1].split('"')[0]
                 self.img = requests.get("http://10.2.37.78:8080/getCaptcha.html", {'PHPSESSID': self.phpsessid}).content
-                compressed_captcha = BytesIO()
-                Image.open(BytesIO(self.img)).convert('1').save(compressed_captcha, 'PNG')
-
-                self.comp_img = compressed_captcha.getvalue()
 
                 return self
 
     @property
-    def b32_comp_img(self):
-        assert self.comp_img is not None
+    def comp_img(self):
+        from PIL import Image
 
-        return b32encode(self.comp_img).rstrip(b'=')
+        compressed_captcha = BytesIO()
+        Image.open(BytesIO(self.img)).convert('1').save(compressed_captcha, 'PNG')
+
+        return compressed_captcha.getvalue()
+
+    @property
+    def b32_img(self, compress=COMPRESS):
+        assert self.img is not None
+
+        img = self.comp_img if compress else self.img
+
+        return b32encode(img).rstrip(b'=')
 
     def send_response(self, response):
         assert self.phpsessid is not None
@@ -139,7 +148,7 @@ if __name__ == "__main__":
         logger.info('Captcha detected and loaded, uploading')
 
         cds = CaptchaDNSSender(API_KEY, D, NS)
-        cid = cds.upload_captcha(c.b32_comp_img)
+        cid = cds.upload_captcha(c.b32_img)
         logger.info('Captcha uploaded, waiting for answer')
 
         while CaptchaStatus.FAILED.value < cds.check_status(cid).value < CaptchaStatus.RESOLVED.value:
